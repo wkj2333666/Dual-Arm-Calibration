@@ -1,0 +1,28 @@
+{
+  "source_project": "vlm-folder",
+  "source_head": "52bd0ae13bbfd5e60cd86178231d39cc021f1364",
+  "note": "Hashes refer to extracted working-tree files, which may differ from HEAD. Hardware-independent algorithms adapted; no runtime dependency on source project.",
+  "files": {
+    "vlm_folder/hand_eye/geometry.py": {
+      "sha256": "61388da4f1cdd8f65717dcf1e1a4676667bd04a677f66633653c51f7b63189c5"
+    },
+    "vlm_folder/hand_eye/solve.py": {
+      "sha256": "08aad8ef8f57606edf3ec78990c711345cbfb436108ee5f2e385090af8e5e1f8"
+    },
+    "vlm_folder/hand_eye/board.py": {
+      "sha256": "efcd588777ed2917c7e8e00d71b42d3d042f3530cf1bba1e0ffa4fee8fefc484"
+    },
+    "vlm_folder/franka/camera_model.py": {
+      "sha256": "d939a33b37e409a9dccc82f9d203233f45133063722e02d9d1bd4eee36e66270"
+    },
+    "vlm_folder/franka/intrinsics.py": {
+      "sha256": "6933ec0ed0a319365512144945512935712e73d10756d4ec364f9305ba04969f"
+    },
+    "vlm_folder/franka/calibration_solver.py": {
+      "sha256": "1dc8b2d825f36c5dda37ced4e480d0c15d772df5beee04810e9b1f7d3468fc84"
+    },
+    "vlm_folder/franka/calibration_overview.py": {
+      "sha256": "608b5b05d69fd0604ae046db051f7e9b3535bf9c03551afe0834bb68f5aefbae"
+    }
+  }
+}
