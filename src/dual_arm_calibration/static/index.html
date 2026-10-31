@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>双臂三相机 · 标定工作台</title>
-  <link rel="stylesheet" href="/style.css">
-  <script src="/app.js" defer></script>
+  <link rel="stylesheet" href="./style.css">
+  <script src="./app.js" defer></script>
 </head>
 <body>
   <aside class="sidebar">
@@ -15,8 +15,9 @@
       <a href="#integration" data-page="integration"><span>02</span>接入配置</a>
       <a href="#offline" data-page="offline"><span>03</span>离线验证</a>
       <a href="#results" data-page="results"><span>04</span>标定结果</a>
+      <a href="#hardware" data-page="hardware" id="hardware-nav" hidden><span>05</span>硬件标定</a>
     </nav>
-    <div class="sidebar-foot"><span class="status-dot"></span>硬件待接入<p>支持不同品牌、不同关节数的双臂。</p></div>
+    <div class="sidebar-foot"><span class="status-dot"></span><span id="side-hardware-label">硬件待接入</span><p>支持不同品牌、不同关节数的双臂。</p></div>
   </aside>
   <main>
     <header><span>标定工作台</span><span class="pill pending">硬件待接入</span></header>
@@ -35,7 +36,7 @@
         <article class="step"><span class="step-number">05</span><div><h3>独立验证与桌面坐标系 <span class="optional">桌面可选</span></h3><p>用独立观测验证三条变换链。需要桌面坐标时，另采平放板并补偿板厚。</p></div></article>
         <article class="step"><span class="step-number">06</span><div><h3>保存与导出</h3><p>保存输入、相机模型、变换矩阵和质量报告，导出可复查的数据包。</p></div></article>
       </div>
-      <div class="notice"><strong>当前接入状态</strong><p>硬件适配器、相机取流与标定板规格均待接入。先完成接入配置，或使用离线示例检查求解流程。</p><div class="actions"><button disabled>开始硬件采集</button><a class="button secondary" href="#offline">运行离线验证</a></div></div>
+      <div class="notice"><strong>当前接入状态</strong><p id="integration-status">硬件适配器、相机取流与标定板规格均待接入。先完成接入配置，或使用离线示例检查求解流程。</p><div class="actions"><button id="open-hardware" disabled>开始硬件采集</button><a class="button secondary" href="#offline">运行离线验证</a></div></div>
     </section>
     <section id="page-integration" class="page" hidden>
       <div class="eyebrow">设备与标定板</div><h1>接入配置</h1>
@@ -61,6 +62,40 @@
       <div class="eyebrow">质量报告与数据包</div><h1>标定结果</h1>
       <p class="lead">通过验证的任务可下载标定 JSON，或包含输入、观测、结果与校验清单的完整数据包。</p>
       <div id="jobs" aria-live="polite"></div>
+    </section>
+    <section id="page-hardware" class="page" hidden>
+      <div class="eyebrow">Piper · 实测状态与原始图像</div><h1>硬件标定</h1>
+      <p class="lead">手动调整机械臂或标定板，停稳后采集。腕外参每批内保持板固定；顶相机桥接在每组之间移动板。此页面不发送运动命令。</p>
+      <p id="hardware-error" class="feedback error" role="status" hidden></p>
+      <div class="camera-grid">
+        <article class="card"><h3>左腕相机</h3><img data-camera="left" alt="左腕相机实时预览"><small data-identity="left"></small></article>
+        <article class="card"><h3>固定顶相机</h3><img data-camera="top" alt="固定顶相机实时预览"><small data-identity="top"></small></article>
+        <article class="card"><h3>右腕相机</h3><img data-camera="right" alt="右腕相机实时预览"><small data-identity="right"></small></article>
+      </div>
+      <div class="card"><h2>新建本次标定</h2><p id="hardware-board" class="subtle"></p>
+        <div class="form-grid">
+          <label class="field">左腕相机参数<select id="mode-left"><option value="reuse">复用厂家参数</option><option value="fit">独立拟合 D435i RGB 畸变</option></select></label>
+          <label class="field">右腕相机参数<select id="mode-right"><option value="reuse">复用厂家参数</option><option value="fit">独立拟合 D435i RGB 畸变</option></select></label>
+          <label class="field">顶相机参数<select id="mode-top"><option value="reuse">复用厂家参数</option><option value="fit">独立拟合 D435i RGB 畸变</option></select></label>
+        </div>
+        <label class="check"><input type="checkbox" id="board-confirmed">已核对这次实际标定板与上述规格相同</label>
+        <label class="check"><input type="checkbox" id="hardware-table">包含桌面标定（可选）</label>
+        <div class="actions"><button id="hardware-new">新建流程</button><span id="hardware-session" class="subtle"></span></div>
+      </div>
+      <div class="card"><h2>采集与计算</h2>
+        <p class="subtle">内参至少 20 张，腕外参至少 20 个姿态，桥接每侧至少 12 组，独立验证与桌面各至少 3 组。质量未达标时按反馈补采。</p>
+        <label class="field">当前阶段<select id="hardware-batch">
+          <option value="intrinsics-left">左腕相机 · 独立内参</option><option value="intrinsics-right">右腕相机 · 独立内参</option><option value="intrinsics-top">顶相机 · 独立内参</option>
+          <option value="wrists-left">左腕相机 · 手眼外参</option><option value="wrists-right">右腕相机 · 手眼外参</option>
+          <option value="bridges-left">顶相机 · 对左基座桥接</option><option value="bridges-right">顶相机 · 对右基座桥接</option>
+          <option value="validation">独立三相机验证</option><option value="table">固定平放板 · 桌面标定</option>
+        </select></label>
+        <p id="batch-status" class="subtle"></p>
+        <label class="check"><input type="checkbox" id="stationary-confirmed">机械臂和板均已停稳；腕外参批次内板固定，桌面批次内板固定平放</label>
+        <div class="actions"><button id="hardware-capture">采集当前阶段</button><button id="hardware-fit" class="secondary">计算并冻结当前阶段</button><button id="hardware-reset" class="secondary">重采当前阶段（保留记录）</button></div>
+        <div class="actions"><button id="hardware-finish" class="secondary">最终验证并导出数据包</button><button id="hardware-resume" class="secondary">最终求解失败后继续补采</button></div>
+        <p id="hardware-feedback" class="feedback" role="status"></p>
+      </div>
     </section>
     <footer>Dual-Arm Calibration <span>通用标定核心 · 硬件通过适配器接入</span></footer>
   </main>

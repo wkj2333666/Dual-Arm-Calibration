@@ -1,4 +1,6 @@
 "use strict";
+const baseURL = new URL(".", location.href);
+const apiURL = path => new URL(path.replace(/^\//, ""), baseURL).href;
 const $ = selector => document.querySelector(selector);
 let state = null;
 let draftLoaded = false;
@@ -12,7 +14,7 @@ function el(tag, text, cls) {
   return node;
 }
 function route() {
-  const page = ["workflow","integration","offline","results"].includes(location.hash.slice(1)) ? location.hash.slice(1) : "workflow";
+  const page = ["workflow","integration","offline","results","hardware"].includes(location.hash.slice(1)) ? location.hash.slice(1) : "workflow";
   document.querySelectorAll(".page").forEach(section => {section.hidden = section.id !== `page-${page}`;});
   document.querySelectorAll("nav a").forEach(a => {
     if (a.dataset.page === page) a.setAttribute("aria-current","page");
@@ -45,7 +47,7 @@ formGroup("标定板",[
 ],"规格保持留空；接入时按实际标定板填写并核验。");
 
 async function request(path, body) {
-  const response = await fetch(path,body === undefined ? {} : {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+  const response = await fetch(apiURL(path),body === undefined ? {} : {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
   const result = await response.json();
   if (!response.ok) throw new Error(result.error || "请求失败");
   return result;
@@ -86,7 +88,7 @@ function renderJobs() {
   const statusNames = {queued:"等待求解",running:"正在求解",succeeded:"验证通过",failed:"求解失败"};
   for (const job of jobs) {
     const card = el("article",undefined,"job"); card.dataset.jobId = job.id;
-    const head = el("div",undefined,"job-head"); head.append(el("h2",job.kind === "demo" ? "离线合成示例" : "导入观测数据"),el("span",statusNames[job.status] || job.status,`pill ${job.status === "succeeded" ? "success" : job.status === "failed" ? "failed" : "pending"}`));
+    const head = el("div",undefined,"job-head"); head.append(el("h2",job.kind === "demo" ? "离线合成示例" : job.kind === "hardware" ? "Piper 实测标定" : "导入观测数据"),el("span",statusNames[job.status] || job.status,`pill ${job.status === "succeeded" ? "success" : job.status === "failed" ? "failed" : "pending"}`));
     card.append(head,el("p",new Date(job.created).toLocaleString(),"job-time"));
     if (job.status === "succeeded") {
       const s = job.summary; const metrics = el("div",undefined,"metrics");
@@ -97,7 +99,7 @@ function renderJobs() {
       if (job.kind === "demo") card.append(el("p","结果来自合成数据，用于检查软件流程，不代表硬件精度。","job-note"));
       const actions = el("div",undefined,"actions");
       for (const [name,label] of [["calibration.json","下载标定 JSON"],["bundle.zip","下载完整数据包"]]) {
-        const link = el("a",label,"button secondary"); link.href=`/api/jobs/${job.id}/${name}`; link.setAttribute("download",""); actions.append(link);
+        const link = el("a",label,"button secondary"); link.href=apiURL(`/api/jobs/${job.id}/${name}`); link.setAttribute("download",""); actions.append(link);
       }
       card.append(actions);
     } else if (job.error) card.append(el("p",job.error,"job-error"));
@@ -112,6 +114,7 @@ async function refresh() {
     const next = await request("/api/state");
     const changed = !state || JSON.stringify(state.jobs) !== JSON.stringify(next.jobs);
     state = next;
+    renderHardware();
     if (!draftLoaded) loadDraft(state.draft);
     if (changed) renderJobs();
     $("#connection-error").hidden = true;
@@ -139,3 +142,71 @@ $("#import-form").addEventListener("submit",async event => {
   } catch(error) {feedback.textContent=`导入失败：${error.message}`; feedback.classList.add("error");}
 });
 refresh(); setInterval(refresh,1200);
+
+let hardwareWorking=false;
+let previewTimer=0;
+function renderHardware() {
+  const hw=state?.hardware;
+  if (!hw?.configured) return;
+  document.body.classList.add('hardware-on');
+  $('#hardware-nav').hidden=false;
+  const badge=$('header .pill'); badge.textContent=hw.connected?'设备在线':'设备连接异常';
+  $('#side-hardware-label').textContent=hw.connected?'设备在线':'设备连接异常';
+  document.querySelectorAll('.rig-strip small').forEach(node=>{node.textContent=hw.connected?'已接入':'等待设备';});
+  badge.className=`pill ${hw.connected?'success':'pending'}`;
+  $('#open-hardware').disabled=!hw.connected;
+  $('#integration-status').textContent='已通过 RoboBench 接入双 Piper 与三台 D435i。请进入硬件标定，确认板规格并新建流程。';
+  const error=$('#hardware-error'); error.hidden=!hw.error; error.textContent=hw.error||'';
+  const b=hw.board;
+  $('#hardware-board').textContent=`已确认板规格：${b.squares_x} × ${b.squares_y} 方格，方格 ${b.square_length_m*1000} mm，标记 ${b.marker_length_m*1000} mm，${b.dictionary}；板厚 ${hw.board_thickness_mm??'未配置'} mm。`;
+  for (const role of ['left','right','top']) {
+    const c=hw.devices?.cameras?.[role];
+    const node=document.querySelector(`[data-identity="${role}"]`);
+    node.textContent=c?`${c.serial} · ${c.intrinsics.width} × ${c.intrinsics.height}`:'等待相机';
+  }
+  const s=hw.session;
+  for(const option of $('#hardware-batch').options) {
+    option.disabled=!!s && (option.value==='table'&&!s.table_enabled || option.value.startsWith('intrinsics-')&&s.modes[option.value.split('-')[1]]!=='fit');
+  }
+  if($('#hardware-batch').selectedOptions[0]?.disabled) $('#hardware-batch').value=Array.from($('#hardware-batch').options).find(o=>!o.disabled).value;
+  $('#hardware-session').textContent=s?`当前流程 ${s.id.slice(0,8)}${s.sealed?' · 已提交最终求解':''}`:'尚未新建流程';
+  const batch=$('#hardware-batch').value;
+  const count=s?.counts[batch]??0;
+  let note=s?`已采集 ${count} 组${s.frozen.includes(batch)?' · 已通过并冻结':''}`:'请先新建流程';
+  const role=batch.replace('intrinsics-','');
+  const cov=s?.coverage?.[role];
+  if(cov && batch.startsWith('intrinsics-')) note+=`。覆盖反馈：${cov.issues.length?cov.issues.join('；'):'已达标'}`;
+  $('#batch-status').textContent=note;
+  for(const name of ['capture','fit','finish','resume','reset']) $('#hardware-'+name).disabled=hardwareWorking||!s||!hw.connected;
+  if(s){
+    for(const name of ['capture','fit','reset']) $('#hardware-'+name).disabled ||= s.sealed||s.frozen.includes(batch);
+    $('#hardware-finish').disabled ||= s.sealed||!s.frozen.includes('validation')||s.table_enabled&&!s.frozen.includes('table');
+    $('#hardware-resume').disabled ||= !s.sealed||!state.jobs.some(j=>j.id===s.job_id&&j.status==='failed');
+  }
+  $('#hardware-new').disabled=hardwareWorking||!hw.connected;
+  if (Date.now()-previewTimer>2200 && location.hash==='#hardware') {
+    previewTimer=Date.now();
+    for (const image of document.querySelectorAll('[data-camera]')) image.src=apiURL(`/api/hardware/preview/${image.dataset.camera}.jpg?t=${previewTimer}`);
+  }
+}
+$('#open-hardware').addEventListener('click',()=>{location.hash='hardware'; renderHardware();});
+$('#hardware-batch').addEventListener('change',renderHardware);
+window.addEventListener('hashchange',()=>{if(state)renderHardware();});
+async function hardwareAction(payload) {
+  hardwareWorking=true; renderHardware();
+  const feedback=$('#hardware-feedback'); feedback.classList.remove('error');
+  feedback.textContent=payload.op==='capture'?'正在检查静止状态、采集原始图像…':'正在处理…';
+  try {
+    const result=await request('/api/hardware/action',payload);
+    feedback.textContent=payload.op==='capture'?'已保存实测位姿与原始图像。':payload.op==='fit'?'该阶段已通过并冻结。':'操作完成。';
+    await refresh();
+    if(result.job_id)location.hash='results';
+  } catch(error){feedback.textContent=error.message;feedback.classList.add('error');}
+  finally{hardwareWorking=false;renderHardware();}
+}
+$('#hardware-new').addEventListener('click',()=>hardwareAction({op:'new',board_confirmed:$('#board-confirmed').checked,table:$('#hardware-table').checked,modes:Object.fromEntries(['left','right','top'].map(r=>[r,$('#mode-'+r).value]))}));
+$('#hardware-capture').addEventListener('click',()=>hardwareAction({op:'capture',batch:$('#hardware-batch').value,stationary_confirmed:$('#stationary-confirmed').checked}));
+$('#hardware-fit').addEventListener('click',()=>hardwareAction({op:'fit',batch:$('#hardware-batch').value}));
+$('#hardware-reset').addEventListener('click',()=>hardwareAction({op:'reset',batch:$('#hardware-batch').value}));
+$('#hardware-finish').addEventListener('click',()=>hardwareAction({op:'finish'}));
+$('#hardware-resume').addEventListener('click',()=>hardwareAction({op:'resume'}));

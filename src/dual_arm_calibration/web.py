@@ -62,12 +62,17 @@ def validate_draft(value):
 
 
 class Workbench:
-    def __init__(self, directory):
+    def __init__(self, directory, hardware_config=None):
         self.directory = Path(directory).resolve()
         self.directory.mkdir(parents=True, exist_ok=True)
         self.lock = threading.Lock()
         self.pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="calibration")
         self.jobs = {}
+        self.live = None
+        if hardware_config:
+            from .live import LiveCalibration
+
+            self.live = LiveCalibration(self.directory, hardware_config)
         self.draft_path = self.directory / "integration-draft.json"
         self.draft = (
             validate_draft(json.loads(self.draft_path.read_text()))
@@ -87,7 +92,7 @@ class Workbench:
 
     def state(self):
         with self.lock:
-            return copy.deepcopy(
+            out = copy.deepcopy(
                 dict(
                     draft=self.draft,
                     hardware_connected=False,
@@ -96,6 +101,10 @@ class Workbench:
                     ),
                 )
             )
+        if self.live:
+            out["hardware"] = self.live.status()
+            out["hardware_connected"] = out["hardware"]["connected"]
+        return out
 
     def save_draft(self, draft):
         draft = validate_draft(draft)
@@ -111,11 +120,11 @@ class Workbench:
 
     def start(self, request):
         kind = request.get("kind")
-        if kind not in ("demo", "import"):
+        if kind not in ("demo", "import", "hardware"):
             raise ValueError("请选择离线示例或导入数据")
         if kind == "demo" and not isinstance(request.get("table", False), bool):
             raise ValueError("桌面选项必须是布尔值")
-        if kind == "import" and (
+        if kind in ("import", "hardware") and (
             not isinstance(request.get("rig"), dict)
             or not isinstance(request.get("data"), dict)
         ):
@@ -187,8 +196,8 @@ class Workbench:
         self.pool.shutdown(wait=True)
 
 
-def make_server(directory, host="127.0.0.1", port=8765):
-    app = Workbench(directory)
+def make_server(directory, host="127.0.0.1", port=8765, hardware_config=None):
+    app = Workbench(directory, hardware_config)
 
     class Handler(BaseHTTPRequestHandler):
         def respond(
@@ -234,6 +243,14 @@ def make_server(directory, host="127.0.0.1", port=8765):
                 )
             if path == "/api/state":
                 return self.respond(200, app.state())
+            preview = re.fullmatch(r"/api/hardware/preview/(left|right|top)\.jpg", path)
+            if preview and app.live:
+                try:
+                    return self.respond(
+                        200, app.live.provider.preview(preview[1]), "image/jpeg"
+                    )
+                except ValueError as exc:
+                    return self.respond(409, dict(error=str(exc)))
             match = re.fullmatch(
                 r"/api/jobs/([a-f0-9]{32})/(calibration\.json|bundle\.zip)", path
             )
@@ -272,6 +289,8 @@ def make_server(directory, host="127.0.0.1", port=8765):
                     return self.respond(200, app.save_draft(request))
                 if path == "/api/jobs":
                     return self.respond(202, app.start(request))
+                if path == "/api/hardware/action" and app.live:
+                    return self.respond(200, app.live.action(request, app))
                 return self.respond(404, dict(error="接口待接入或不存在"))
             except (ValueError, TypeError, KeyError) as exc:
                 self.respond(400, dict(error=str(exc)))
@@ -288,9 +307,9 @@ def make_server(directory, host="127.0.0.1", port=8765):
     return server
 
 
-def serve(directory, host="127.0.0.1", port=8765):
-    server = make_server(directory, host, port)
-    print(f"标定工作台：http://{host}:{server.server_port} （硬件待接入）", flush=True)
+def serve(directory, host="127.0.0.1", port=8765, hardware_config=None):
+    server = make_server(directory, host, port, hardware_config)
+    print(f"标定工作台：http://{host}:{server.server_port}", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

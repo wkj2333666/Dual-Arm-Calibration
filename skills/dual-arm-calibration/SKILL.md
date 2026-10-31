@@ -27,6 +27,15 @@ description: Calibrate two robot arms with one camera on each wrist and one fixe
 网页“接入配置”只保存草稿，填满字段仍不表示设备已连接。离线示例自带合成板规格，
 仅用于验证求解，不能回填到真实硬件草稿。当前网页可运行离线任务、导入标准数据和下载结果。
 
+## 已有接入实现：Piper / RoboBench
+
+当用户明确要求部署到 Piper 时，使用 [Piper 接入说明](../../docs/piper.md)。通过显式的
+`--hardware-config` 启用接入，设备序列号和板规格来自现场确认，保存在被忽略的数据目录中。
+未配置该参数的通用网页仍保持空白。
+接入复用 RoboBench 已有设备进程，不能再启动第二组 CAN / RealSense 连接。
+硬件页面支持原始 RGB、实测法兰位姿的手动分阶段采集与求解，不自动移动机械臂。
+旧外参若未通过质量检查，只能保留为历史参考，不能充当已验证结果或用于无审查自动规划。
+
 ## 操作决策
 
 1. 确认 left/right 机械臂、left/right 腕相机、top 固定相机角色及安装身份，不假定品牌或关节数。

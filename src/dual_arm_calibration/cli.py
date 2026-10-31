@@ -20,6 +20,10 @@ def main(argv=None):
     web.add_argument("--host", default="127.0.0.1")
     web.add_argument("--port", type=int, default=8765)
     web.add_argument("--data-dir", default="runs/web")
+    web.add_argument(
+        "--hardware-config",
+        help="Explicit site-specific hardware JSON; no default hardware is loaded",
+    )
     demo = sub.add_parser(
         "demo", help="Generate and solve a synthetic six/seven-joint rig"
     )
@@ -49,7 +53,12 @@ def main(argv=None):
         if args.command == "web":
             from .web import serve
 
-            serve(args.data_dir, args.host, args.port)
+            serve(
+                args.data_dir,
+                args.host,
+                args.port,
+                read(args.hardware_config) if args.hardware_config else None,
+            )
             return
         if args.command == "check-rig":
             rig = read(args.rig)
