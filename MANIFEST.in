@@ -2,3 +2,4 @@ include README.md
 recursive-include docs *.md *.json
 recursive-include skills *.md
 recursive-include tests *.py
+recursive-include src/dual_arm_calibration/static *.html *.css *.js

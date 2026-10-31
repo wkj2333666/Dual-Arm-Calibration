@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>双臂三相机 · 标定工作台</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="#workflow"><span class="brand-mark">◎</span><span>双臂三相机<small>CALIBRATION WORKBENCH</small></span></a>
+    <nav aria-label="工作台导航">
+      <a href="#workflow" data-page="workflow" aria-current="page"><span>01</span>标定流程</a>
+      <a href="#integration" data-page="integration"><span>02</span>接入配置</a>
+      <a href="#offline" data-page="offline"><span>03</span>离线验证</a>
+      <a href="#results" data-page="results"><span>04</span>标定结果</a>
+    </nav>
+    <div class="sidebar-foot"><span class="status-dot"></span>硬件待接入<p>支持不同品牌、不同关节数的双臂。</p></div>
+  </aside>
+  <main>
+    <header><span>标定工作台</span><span class="pill pending">硬件待接入</span></header>
+    <div id="connection-error" class="notice error" role="alert" hidden></div>
+    <section id="page-workflow" class="page">
+      <div class="eyebrow">统一空间关系 · 独立质量验证</div>
+      <h1>双臂三相机标定</h1>
+      <p class="lead">左右腕相机连接各自机械臂，固定顶相机统一两个基座。根据任务需要选择内参修正和桌面坐标系。</p>
+      <div class="rig-strip" aria-label="硬件结构"><div><span class="rig-icon">↙</span><strong>左机械臂 + 腕相机</strong><small>待接入</small></div><div><span class="rig-icon">⊙</span><strong>固定顶相机</strong><small>待接入</small></div><div><span class="rig-icon">↘</span><strong>右机械臂 + 腕相机</strong><small>待接入</small></div></div>
+      <div class="section-heading"><h2>标定步骤</h2><a href="#integration">填写接入草稿 →</a></div>
+      <div class="steps">
+        <article class="step"><span class="step-number">01</span><div><h3>确认硬件与标定板</h3><p>确认适配器、坐标约定、相机配置与标定板规格。</p><span class="pill pending">待接入</span></div></article>
+        <article class="step"><span class="step-number">02</span><div><h3>选择相机参数 <span class="optional">可选标定</span></h3><p>每台相机可复用参数；D435i RGB 可选择固定厂家 K、仅拟合 k1 和 k2。</p></div></article>
+        <article class="step"><span class="step-number">03</span><div><h3>分别标定左右腕相机</h3><p>每侧固定标定板，采集不同机械臂姿态，求解相机到法兰的变换。</p></div></article>
+        <article class="step"><span class="step-number">04</span><div><h3>通过顶相机连接双臂</h3><p>顶相机分别与左右腕相机成对观察，统一两个基座的坐标关系。</p></div></article>
+        <article class="step"><span class="step-number">05</span><div><h3>独立验证与桌面坐标系 <span class="optional">桌面可选</span></h3><p>用独立观测验证三条变换链。需要桌面坐标时，另采平放板并补偿板厚。</p></div></article>
+        <article class="step"><span class="step-number">06</span><div><h3>保存与导出</h3><p>保存输入、相机模型、变换矩阵和质量报告，导出可复查的数据包。</p></div></article>
+      </div>
+      <div class="notice"><strong>当前接入状态</strong><p>硬件适配器、相机取流与标定板规格均待接入。先完成接入配置，或使用离线示例检查求解流程。</p><div class="actions"><button disabled>开始硬件采集</button><a class="button secondary" href="#offline">运行离线验证</a></div></div>
+    </section>
+    <section id="page-integration" class="page" hidden>
+      <div class="eyebrow">设备与标定板</div><h1>接入配置</h1>
+      <p class="lead">以下字段初始留空，作为后续接入清单保存。填写草稿后仍需实现并验证适配器，才能开始硬件采集。</p>
+      <form id="draft-form">
+        <div id="draft-fields"></div>
+        <label class="field">接入备注<textarea name="notes" rows="3" placeholder="待接入"></textarea></label>
+        <div class="actions"><button type="submit">保存接入草稿</button><span id="draft-feedback" role="status"></span></div>
+      </form>
+      <div class="notice"><strong>待接入内容已写入 Skill</strong><p>设备连接、法兰位姿转换、相机图像配置、标定板实测规格，以及网页预览和采集接口，需要在具体机器人上完成接入。</p><a href="https://github.com/wkj2333666/Dual-Arm-Calibration/blob/main/skills/dual-arm-calibration/SKILL.md" target="_blank" rel="noopener">查看 Skill 接入清单 ↗</a></div>
+    </section>
+    <section id="page-offline" class="page" hidden>
+      <div class="eyebrow">无需连接硬件</div><h1>离线验证</h1>
+      <p class="lead">运行合成示例，或上传已有标准观测。离线任务不会修改接入草稿，也不会连接或移动机械臂。</p>
+      <div class="two-columns">
+        <article class="card"><span class="pill neutral">合成数据</span><h2>运行完整示例</h2><p>使用左六关节、右七关节的已知真值，执行手眼、顶相机桥接和独立验证。</p><label class="check"><input type="checkbox" id="demo-table">包含可选桌面标定</label><button id="run-demo" type="button">运行离线示例</button><p class="subtle">示例板规格只用于合成数据，不代表实际标定板配置。</p></article>
+        <article class="card"><span class="pill neutral">已有观测</span><h2>导入标准数据</h2><p>上传匹配的设备配置和观测 JSON。可选步骤以导入配置为准。</p><form id="import-form"><label class="field">设备配置 · rig.json<input id="rig-file" type="file" accept=".json,application/json" required></label><label class="field">观测数据 · observations.json<input id="data-file" type="file" accept=".json,application/json" required></label><button type="submit" id="run-import">导入并求解</button></form></article>
+      </div>
+      <p id="offline-feedback" role="status" class="feedback"></p>
+      <div class="notice"><strong>D435i 内参拟合的适用范围</strong><p>当前拟合配置针对 RealSense D435i RGB，固定厂家焦距与主点，仅拟合径向畸变 k1、k2，令 k3、p1、p2 为零。其他相机应提供适用的已标定模型。</p></div>
+    </section>
+    <section id="page-results" class="page" hidden>
+      <div class="eyebrow">质量报告与数据包</div><h1>标定结果</h1>
+      <p class="lead">通过验证的任务可下载标定 JSON，或包含输入、观测、结果与校验清单的完整数据包。</p>
+      <div id="jobs" aria-live="polite"></div>
+    </section>
+    <footer>Dual-Arm Calibration <span>通用标定核心 · 硬件通过适配器接入</span></footer>
+  </main>
+</body>
+</html>

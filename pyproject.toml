@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dual-arm-calibration"
-version = "0.1.0"
+version = "0.2.0"
 description = "Hardware-independent calibration for two arms, two wrist cameras and one fixed camera"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -19,9 +19,12 @@ dual-arm-calibration = "dual_arm_calibration.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+dual_arm_calibration = ["static/*.html", "static/*.css", "static/*.js"]
+
 [tool.setuptools.data-files]
 "share/dual-arm-calibration/skills/dual-arm-calibration" = ["skills/dual-arm-calibration/SKILL.md"]
-"share/dual-arm-calibration/docs" = ["docs/workflow.md", "docs/data-format.md", "docs/adapters.md", "docs/provenance.json", "docs/validation.md"]
+"share/dual-arm-calibration/docs" = ["docs/workflow.md", "docs/data-format.md", "docs/adapters.md", "docs/provenance.json", "docs/validation.md", "docs/web.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

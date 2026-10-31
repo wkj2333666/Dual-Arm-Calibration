@@ -3,8 +3,9 @@
 面向**两条机械臂、两台腕相机、一台固定顶相机**的通用标定工具包。
 左右机械臂可以不同品牌、不同关节数；核心不依赖任何机器人 SDK、ROS、远程服务或固定目录。
 
-当前版本提供可运行的离线求解、手动采集 API、录像选帧、硬件适配协议、CLI 和 Codex Skill。
-真实硬件的驱动、自动采集轨迹规划与执行由外部适配器实现；本仓库不内置特定品牌驱动或网页界面。
+当前版本提供网页工作台、离线求解、手动采集 API、录像选帧、硬件适配协议、CLI 和 Codex Skill。
+网页的硬件适配器、连接配置和标定板规格初始留空，明确标记为待接入。
+真实硬件的驱动、相机预览、采集和自动运动入口需要接入具体设备后实现。
 
 ## 流程
 
@@ -31,6 +32,17 @@ python -m venv .venv
 source .venv/bin/activate
 python -m pip install -e '.[dev]'
 
+dual-arm-calibration web
+```
+
+浏览器打开 **http://127.0.0.1:8765**。网页支持查看流程、保存空白接入草稿、运行离线示例、
+上传标准观测求解，以及下载标定 JSON 和完整数据包。填写草稿不会连接设备。
+启动目录下的 `runs/web/` 保存草稿与任务；可通过 `--data-dir` 指定目录，`--port` 更换端口。
+服务默认只监听本机地址，关闭终端中的服务后网页停止更新。
+
+命令行也可以单独运行：
+
+```bash
 dual-arm-calibration demo --output runs/demo
 dual-arm-calibration demo --table --output runs/demo-table
 pytest -q
@@ -54,6 +66,7 @@ dual-arm-calibration publish runs/calibration-001 active-calibration.json
 - [统一标定流程](docs/workflow.md)：采集顺序、可选步骤、验收和失效规则。
 - [数据格式](docs/data-format.md)：坐标约定、相机模型、观测结构和结果。
 - [适配器接口](docs/adapters.md)：任意机械臂/相机如何接入。
+- [网页工作台](docs/web.md)：启动、使用和待接入边界。
 - [操作 Skill](skills/dual-arm-calibration/SKILL.md)：供 Codex 使用，可复制整个 Skill 目录到自己的技能目录。
 - [代码来源](docs/provenance.json)：提取时的版本及工作区文件哈希。
 - [验证记录](docs/validation.md)：合成测试、历史实测回放和安装包验证的范围。
@@ -67,7 +80,6 @@ dual-arm-calibration publish runs/calibration-001 active-calibration.json
 python -m build
 ```
 
-仓库名建议为 `dual-arm-calibration`。在 GitHub 创建同名空仓库后，将其实际地址设置为
-`origin`，再执行 `git push -u origin main`。本地准备不会自动创建或发布 GitHub 仓库。
+GitHub 仓库：[wkj2333666/Dual-Arm-Calibration](https://github.com/wkj2333666/Dual-Arm-Calibration)。
 
 目前未指定开源许可证；公开发布前由仓库所有者选择许可证。

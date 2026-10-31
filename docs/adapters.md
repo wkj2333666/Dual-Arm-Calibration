@@ -3,6 +3,10 @@
 核心只接受标准观测；没有硬件适配器仍能执行全部离线求解。
 左右机器人可以不同厂家、不同关节数，代码不调用品牌 SDK 或假定 Euler 角顺序。
 
+当前网页中的实际适配器、连接、相机身份与标定板规格全部留空、待接入。
+网页草稿不加载插件，也不把配置完整性当作设备连接成功；接入清单维护在
+[Skill](../skills/dual-arm-calibration/SKILL.md) 中。
+
 `dual_arm_calibration.adapters` 提供 ArmState、CameraFrame、ArmReader、CameraReader、MotionAdapter 协议。
 
 - ArmReader.read_state：实测 base_from_flange、joint_angles_rad、stationary、host_monotonic_s。

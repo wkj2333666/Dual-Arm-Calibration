@@ -14,6 +14,12 @@ def main(argv=None):
         description="Offline dual-arm / three-camera calibration; no robot motion"
     )
     sub = parser.add_subparsers(dest="command", required=True)
+    web = sub.add_parser(
+        "web", help="Open a local web workbench; hardware remains unconfigured"
+    )
+    web.add_argument("--host", default="127.0.0.1")
+    web.add_argument("--port", type=int, default=8765)
+    web.add_argument("--data-dir", default="runs/web")
     demo = sub.add_parser(
         "demo", help="Generate and solve a synthetic six/seven-joint rig"
     )
@@ -40,6 +46,11 @@ def main(argv=None):
     video.add_argument("--output", required=True)
     args = parser.parse_args(argv)
     try:
+        if args.command == "web":
+            from .web import serve
+
+            serve(args.data_dir, args.host, args.port)
+            return
         if args.command == "check-rig":
             rig = read(args.rig)
             check_rig(rig)
