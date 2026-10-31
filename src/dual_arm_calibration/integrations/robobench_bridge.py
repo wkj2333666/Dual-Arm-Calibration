@@ -1,7 +1,7 @@
-"""Read/capture bridge installed in the process that already owns the hardware.
+"""Read/capture and reviewed-motion bridge in the existing hardware owner.
 
-No new CAN/RealSense connection and no motion command. The existing operation
-coordinator excludes teleop, motion, capture and reconfiguration during capture.
+Device streams reuse RoboBench's connections. Confirmed automatic trajectories
+delegate to its bounded Piper executor and shared operation coordinator.
 """
 
 import io
@@ -111,6 +111,60 @@ def install(app):
             intrinsics=normalize_intrinsics(meta),
         )
 
+    from .robobench_motion import CalibrationMotion
+
+    motion = CalibrationMotion(ROOT, kinematics, service, metadata, arm_state)
+
+    @router.post("/api/dual-arm-calibration/motion/estimate")
+    def estimate_pose(request: Request, payload: dict):
+        try:
+            return motion.estimate(request.app.state, payload)
+        except (ValueError, KeyError, RuntimeError) as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    @router.post("/api/dual-arm-calibration/motion/plan")
+    def plan_capture(request: Request, payload: dict):
+        try:
+            return motion.plan(request.app.state, payload)
+        except (ValueError, KeyError, RuntimeError) as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    @router.get("/api/dual-arm-calibration/motion/{jid}")
+    def capture_motion_status(jid: str):
+        try:
+            return motion.public(jid)
+        except ValueError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @router.post("/api/dual-arm-calibration/motion/start")
+    def start_capture_motion(request: Request, payload: dict):
+        try:
+            motion.start(
+                request.app.state,
+                payload["id"],
+                payload["token"],
+                payload.get("confirmed") is True,
+            )
+            return dict(ok=True)
+        except (ValueError, KeyError, RuntimeError) as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    @router.post("/api/dual-arm-calibration/motion/stop")
+    def stop_capture_motion(payload: dict):
+        try:
+            motion.stop(payload["id"], payload["token"])
+            return dict(cancel_requested=True)
+        except (ValueError, KeyError) as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    @router.post("/api/dual-arm-calibration/motion/ack")
+    def capture_ack(payload: dict):
+        try:
+            motion.acknowledge(payload["id"], payload["token"], payload["index"])
+            return dict(ok=True)
+        except (ValueError, KeyError) as exc:
+            raise HTTPException(409, str(exc)) from exc
+
     @router.get("/api/dual-arm-calibration/status")
     def status(request: Request):
         state = request.app.state
@@ -154,7 +208,7 @@ def install(app):
         svc = service(request.app.state)
         try:
             images, packets = {}, []
-            with svc._hardware():
+            with motion.capture_lease(request.app.state, payload.get("motion")):
                 anchor = {a: arm_state(svc, a) for a in ("left", "right")}
                 since = time.monotonic()
                 for index in range(2):

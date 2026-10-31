@@ -46,7 +46,7 @@ class Provider:
     def probe(self):
         return copy.deepcopy(self.status)
 
-    def capture(self, roles):
+    def capture(self, roles, motion=None):
         packets, images = [], {}
         for i in (0, 1):
             packets.append(
@@ -141,6 +141,45 @@ def test_moving_board_missing_board_and_profile_change_are_rejected(app):
     with pytest.raises(ValueError, match="角点"):
         app.live.action(payload, app)
     assert not app.live.session["data"]["wrists"]["left"]
+
+
+@pytest.mark.parametrize("moved", [False, True])
+def test_fixed_top_tracking_is_independent_of_wrist_seed_error(app, moved):
+    from dual_arm_calibration.camera_model import matrix
+
+    new(app)
+    s = app.live.session
+    intr = s["models"]["top"]["intrinsics"]
+    board = Board(s["rig"]["board"])
+    d, _ = board.detect(app.live.provider.image, matrix(intr), intr["coeffs"])
+    reference = d.camera_from_target.copy()
+    if moved:
+        reference[0, 3] += 0.02
+    wrong = np.eye(4)
+    wrong[0, 3] = 0.2
+    payload = dict(
+        op="capture",
+        batch="wrists-left",
+        stationary_confirmed=True,
+        motion=dict(id="mock", token="mock"),
+        board_reference=np.eye(4).tolist(),
+        planning_seed=wrong.tolist(),
+        top_reference=dict(
+            serial=s["models"]["top"]["serial"], camera_from_board=reference.tolist()
+        ),
+    )
+    if moved:
+        with pytest.raises(ValueError, match="顶相机检测到板移动"):
+            app.live.action(payload, app)
+        assert not s["data"]["wrists"]["left"]
+    else:
+        app.live.action(payload, app)
+        row = s["data"]["wrists"]["left"][0]
+        assert row["camera_frame"]["serial"] == s["models"]["left"]["serial"]
+        assert (
+            row["measurement"]["fixed_top_observation"]["camera_frame"]["serial"]
+            == s["models"]["top"]["serial"]
+        )
 
 
 def test_stage_dependencies_and_frozen_results(app):

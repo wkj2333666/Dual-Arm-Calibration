@@ -147,6 +147,7 @@ refresh(); setInterval(refresh,1200);
 
 let hardwareWorking=false;
 let previewTimer=0;
+let hardwareSetupSession=null;
 function renderHardware() {
   const hw=state?.hardware;
   if (!hw?.configured) return;
@@ -200,6 +201,11 @@ function renderHardware() {
     node.textContent=c?`${c.serial} · ${c.intrinsics.width} × ${c.intrinsics.height}`:'等待相机';
   }
   const s=hw.session;
+  if(s&&hardwareSetupSession!==s.id){
+    hardwareSetupSession=s.id;
+    for(const r of ['left','right','top'])$('#mode-'+r).value=s.modes[r];
+    $('#hardware-table').checked=s.table_enabled;
+  }
   for(const option of $('#hardware-batch').options) {
     option.disabled=!!s && (option.value==='table'&&!s.table_enabled || option.value.startsWith('intrinsics-')&&s.modes[option.value.split('-')[1]]!=='fit');
   }
@@ -219,6 +225,7 @@ function renderHardware() {
     $('#hardware-resume').disabled ||= !s.sealed||!state.jobs.some(j=>j.id===s.job_id&&j.status==='failed');
   }
   $('#hardware-new').disabled=hardwareWorking||!hw.connected;
+  renderAutomatic(hw);
   if (Date.now()-previewTimer>2200 && location.hash==='#hardware') {
     previewTimer=Date.now();
     for (const image of document.querySelectorAll('[data-camera]')) image.src=apiURL(`/api/hardware/preview/${image.dataset.camera}.jpg?t=${previewTimer}`);
@@ -230,10 +237,10 @@ window.addEventListener('hashchange',()=>{if(state)renderHardware();});
 async function hardwareAction(payload) {
   hardwareWorking=true; renderHardware();
   const feedback=$('#hardware-feedback'); feedback.classList.remove('error');
-  feedback.textContent=payload.op==='capture'?'正在检查静止状态、采集原始图像…':'正在处理…';
+  feedback.textContent=payload.op==='capture'?'正在检查静止状态、采集原始图像…':payload.op==='estimate'?'正在读取当前图像并估算板位姿…':'正在处理…';
   try {
     const result=await request('/api/hardware/action',payload);
-    feedback.textContent=payload.op==='capture'?'已保存实测位姿与原始图像。':payload.op==='fit'?'该阶段已通过并冻结。':'操作完成。';
+    feedback.textContent=payload.op==='capture'?'已保存实测位姿与原始图像。':payload.op==='fit'?'该阶段已通过并冻结。':payload.op==='auto-plan'?'正在后台生成并检查轨迹。':payload.op==='auto-start'?'自动采集已启动，可随时停止并保持。':'操作完成。';
     await refresh();
     if(result.job_id)location.hash='results';
   } catch(error){feedback.textContent=error.message;feedback.classList.add('error');}
@@ -245,3 +252,54 @@ $('#hardware-fit').addEventListener('click',()=>hardwareAction({op:'fit',batch:$
 $('#hardware-reset').addEventListener('click',()=>hardwareAction({op:'reset',batch:$('#hardware-batch').value}));
 $('#hardware-finish').addEventListener('click',()=>hardwareAction({op:'finish'}));
 $('#hardware-resume').addEventListener('click',()=>hardwareAction({op:'resume'}));
+
+let previewId=null,previewData=null,viewYaw=-.7,viewPitch=.6,dragOrigin=null;
+function renderAutomatic(hw){
+ const a=hw.automatic||{state:'idle'},s=hw.session;
+ const running=['planning','starting','running','stopping'].includes(a.state);
+ const batch=$('#hardware-batch').value;
+ const wristBatch=/^(intrinsics|wrists)-(left|right)$/.test(batch);
+ const valid=hw.connected&&s&&!s.sealed&&wristBatch&&!s.frozen.includes(batch);
+ const names={idle:'先估算当前板位姿，再生成轨迹。',estimated:'板位姿已估算，可生成采集轨迹。',planning:`正在生成并检查轨迹 · ${Math.round((a.progress||0)*100)}%`,preview:'轨迹已生成，请旋转预览并核验各点位。',starting:'正在复核起点与板位姿…',running:`自动采集 ${a.index||0}/${a.total||0} · 已保存 ${a.saved||0} · 跳过 ${a.skips?.length||0} · ${a.phase==='capturing'?'停稳采集中':a.phase==='awaiting_capture'?'等待取帧':'运动中'}`,completed:`自动采集结束 · 已保存 ${a.saved||0} · 跳过 ${a.skips?.length||0}，请计算并检查覆盖。`,cancelled:'自动采集已停止，已保存样本保留。',stopping:'已请求停止并保持当前位置。',failed:'自动流程失败：'+a.error,interrupted:a.error};
+ $('#automatic-status').textContent=names[a.state]||a.state;
+ $('#hardware-estimate').disabled=hardwareWorking||!valid||running;
+ $('#hardware-plan').disabled=hardwareWorking||!valid||running||!a.estimate||a.batch!==batch;
+ $('#hardware-auto-start').disabled=hardwareWorking||!valid||a.state!=='preview'||a.batch!==batch||!$('#trajectory-confirmed').checked;
+ $('#hardware-stop').disabled=!running&&a.state!=='preview';
+ if(running){for(const name of ['capture','fit','reset','finish','resume','new'])$('#hardware-'+name).disabled=true;}
+ const e=a.estimate;
+ $('#pose-estimate').textContent=e?`板在${e.arm==='left'?'左':'右'}基座中：XYZ ${e.board_position_m.map(v=>(v*1000).toFixed(1)).join(' / ')} mm；XYZ 角 ${e.board_rotation_deg.map(v=>v.toFixed(1)).join(' / ')}°；${e.corner_count} 个角点，重投影 ${e.reprojection_error_px.toFixed(3)} px。`:'';
+ $('#planning-seed-note').textContent=e?.seed?.warning||'';
+ if(e)$('#pose-estimate').textContent+=e.top_reference?' 固定板由顶相机独立跟踪。':' 固定板跟踪需已验证腕外参或顶相机可见。';
+ const p=a.state==='interrupted'?null:a.preview;$('#trajectory-preview').hidden=!p;
+ if(p&&previewId!==p.id){previewId=p.id;previewData=p;$('#trajectory-confirmed').checked=false;$('#trajectory-point').max=p.waypoints.length-1;$('#trajectory-point').value=0;drawTrajectory();}
+ $('#trajectory-summary').textContent=p?`${p.waypoints.length} 个采集姿态 · 预计 ${Math.ceil(p.duration_s/60)} 分钟 · 关节速度上限 ${p.max_speed_deg_s}°/s · 路径模型最小间隙 ${p.min_clearance_mm.toFixed(1)} mm`:'';
+}
+function drawTrajectory(){
+ const p=previewData;if(!p)return;
+ const canvas=$('#trajectory-canvas'),ctx=canvas.getContext('2d'),w=canvas.width,h=canvas.height;
+ const index=Number($('#trajectory-point').value),point=p.waypoints[index],B=p.estimate.base_from_board;
+ const width=p.board.squares_x*p.board.square_length_m,height=p.board.squares_y*p.board.square_length_m;
+ const board=[[0,0,0],[width,0,0],[width,height,0],[0,height,0]].map(x=>[0,1,2].map(i=>B[i][3]+x.reduce((s,v,j)=>s+B[i][j]*v,0)));
+ const camera=q=>q.base_from_camera.slice(0,3).map(row=>row[3]);
+ const raw=[...board,...point.links_base,...(p.other_links_base||[]),...p.waypoints.map(camera)];
+ const rotate=v=>{const x=Math.cos(viewYaw)*v[0]-Math.sin(viewYaw)*v[1],y=Math.sin(viewYaw)*v[0]+Math.cos(viewYaw)*v[1];return[x,Math.sin(viewPitch)*y-Math.cos(viewPitch)*v[2]];};
+ const values=raw.map(rotate),lo=[0,1].map(i=>Math.min(...values.map(x=>x[i]))),hi=[0,1].map(i=>Math.max(...values.map(x=>x[i])));
+ const scale=Math.min((w-100)/Math.max(.1,hi[0]-lo[0]),(h-80)/Math.max(.1,hi[1]-lo[1]));
+ const project=v=>{const r=rotate(v);return[w/2+(r[0]-(lo[0]+hi[0])/2)*scale,h/2+(r[1]-(lo[1]+hi[1])/2)*scale];};
+ ctx.clearRect(0,0,w,h);ctx.font='13px sans-serif';
+ const line=(pts,color,size=3,close=false)=>{if(!pts.length)return;ctx.beginPath();pts.map(project).forEach((x,i)=>i?ctx.lineTo(...x):ctx.moveTo(...x));if(close)ctx.closePath();ctx.strokeStyle=color;ctx.lineWidth=size;ctx.stroke();};
+ line(p.other_links_base||[],'#acb5b1',11);line(point.links_base,'#176b55',9);line([...p.waypoints.map(camera)],'#719c88',2);line(board,'#be922b',4,true);
+ p.waypoints.forEach((q,i)=>{const xy=project(camera(q));ctx.beginPath();ctx.arc(...xy,i===index?7:3,0,Math.PI*2);ctx.fillStyle=i===index?'#b45b24':'#176b55';ctx.fill();});
+ const origin=project([0,0,0]);for(const [v,color,label] of [[[.1,0,0],'#b44','X'],[[0,.1,0],'#497','Y'],[[0,0,.1],'#57b','Z']]){const xy=project(v);line([[0,0,0],v],color,2);ctx.fillStyle=color;ctx.fillText(label,xy[0]+4,xy[1]);}ctx.fillStyle='#68756d';ctx.fillText('拖动旋转视角 · 坐标单位 m',18,24);
+ $('#trajectory-joints').textContent=`点位 ${index+1}/${p.waypoints.length} · ${point.visible_corners} 个预计可见角点 · 关节角 ${point.joints_deg.map(v=>v.toFixed(1)+'°').join(' / ')}`;
+}
+$('#trajectory-canvas').addEventListener('pointerdown',e=>{dragOrigin=[e.clientX,e.clientY,viewYaw,viewPitch];e.target.setPointerCapture(e.pointerId);});
+$('#trajectory-canvas').addEventListener('pointermove',e=>{if(!dragOrigin)return;viewYaw=dragOrigin[2]+(e.clientX-dragOrigin[0])*.01;viewPitch=Math.max(-1.4,Math.min(1.4,dragOrigin[3]+(e.clientY-dragOrigin[1])*.01));drawTrajectory();});
+$('#trajectory-canvas').addEventListener('pointerup',()=>{dragOrigin=null;});
+$('#trajectory-point').addEventListener('input',drawTrajectory);
+$('#trajectory-confirmed').addEventListener('change',()=>{if(state)renderHardware();});
+$('#hardware-estimate').addEventListener('click',()=>hardwareAction({op:'estimate',batch:$('#hardware-batch').value}));
+$('#hardware-plan').addEventListener('click',()=>hardwareAction({op:'auto-plan',batch:$('#hardware-batch').value}));
+$('#hardware-auto-start').addEventListener('click',()=>hardwareAction({op:'auto-start',batch:$('#hardware-batch').value,confirmed:$('#trajectory-confirmed').checked}));
+$('#hardware-stop').addEventListener('click',async()=>{try{await request('/api/hardware/action',{op:'auto-stop'});await refresh();}catch(e){$('#hardware-feedback').textContent=e.message;}});

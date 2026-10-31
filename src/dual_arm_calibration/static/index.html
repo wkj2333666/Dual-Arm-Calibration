@@ -65,7 +65,7 @@
     </section>
     <section id="page-hardware" class="page" hidden>
       <div class="eyebrow">Piper · 实测状态与原始图像</div><h1>硬件标定</h1>
-      <p class="lead">手动调整机械臂或标定板，停稳后采集。腕外参每批内保持板固定；顶相机桥接在每组之间移动板。此页面不发送运动命令。</p>
+      <p class="lead">可手动停稳采集，也可估算板位姿、预览轨迹后启动自动采集。腕相机自动采集整批内保持板固定；顶相机桥接在每组之间移动板。</p>
       <p id="hardware-error" class="feedback error" role="status" hidden></p>
       <div class="camera-grid">
         <article class="card"><h3>左腕相机</h3><img data-camera="left" alt="左腕相机实时预览"><small data-identity="left"></small></article>
@@ -91,6 +91,22 @@
           <option value="validation">独立三相机验证</option><option value="table">固定平放板 · 桌面标定</option>
         </select></label>
         <p id="batch-status" class="subtle"></p>
+        <div class="auto-panel">
+          <h3>姿态估算与自动采集</h3>
+          <p class="subtle">左右腕相机可由当前图像估算板位姿，生成内参 28 个／外参 20 个姿态的补采轨迹。板在整批运动中保持固定。顶相机与桥接使用手动采集。</p>
+          <div class="actions"><button id="hardware-estimate" class="secondary">估算当前板位姿</button><button id="hardware-plan" class="secondary">生成采集轨迹</button><button id="hardware-stop" class="stop-button">停止并保持</button></div>
+          <p id="automatic-status" class="feedback" role="status"></p>
+          <p id="pose-estimate" class="subtle"></p><p id="planning-seed-note" class="feedback"></p>
+          <div id="trajectory-preview" hidden>
+            <p id="trajectory-summary" class="subtle"></p>
+            <canvas id="trajectory-canvas" width="900" height="420" aria-label="采集轨迹三维预览，拖动旋转视角"></canvas>
+            <label class="field">预览点位<input type="range" id="trajectory-point" min="0" max="0" value="0"></label>
+            <div id="trajectory-joints" class="subtle"></div>
+            <p class="subtle">青色为当前运动臂，灰色为另一臂，黄色为标定板。拖动可旋转预览，滑块选择点位。</p>
+          </div>
+          <label class="check"><input type="checkbox" id="trajectory-confirmed">已核验规划初值、起点和完整轨迹，确认板固定且路径可执行</label>
+          <div class="actions"><button id="hardware-auto-start">开始自动采集当前批次</button></div>
+        </div>
         <label class="check"><input type="checkbox" id="stationary-confirmed">机械臂和板均已停稳；腕外参批次内板固定，桌面批次内板固定平放</label>
         <div class="actions"><button id="hardware-capture">采集当前阶段</button><button id="hardware-fit" class="secondary">计算并冻结当前阶段</button><button id="hardware-reset" class="secondary">重采当前阶段（保留记录）</button></div>
         <div class="actions"><button id="hardware-finish" class="secondary">最终验证并导出数据包</button><button id="hardware-resume" class="secondary">最终求解失败后继续补采</button></div>

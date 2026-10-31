@@ -48,8 +48,10 @@ class RoboBench:
             raise ValueError("未知相机")
         return self.request(f"/api/cameras/{role}/snapshot", timeout=5)
 
-    def capture(self, roles):
-        payload = self.request("/api/dual-arm-calibration/capture", dict(roles=roles))
+    def capture(self, roles, motion=None):
+        payload = self.request(
+            "/api/dual-arm-calibration/capture", dict(roles=roles, motion=motion)
+        )
         with zipfile.ZipFile(io.BytesIO(payload)) as z:
             result = json.loads(z.read("metadata.json"))
             result["images"] = {
@@ -60,3 +62,27 @@ class RoboBench:
                 for r in roles
             }
         return result
+
+    def estimate(self, request):
+        return json.loads(
+            self.request("/api/dual-arm-calibration/motion/estimate", request)
+        )
+
+    def plan(self, request):
+        return json.loads(
+            self.request("/api/dual-arm-calibration/motion/plan", request)
+        )
+
+    def motion_status(self, jid):
+        return json.loads(
+            self.request("/api/dual-arm-calibration/motion/" + jid, timeout=5)
+        )
+
+    def motion_command(self, command, claim, **fields):
+        return json.loads(
+            self.request(
+                "/api/dual-arm-calibration/motion/" + command,
+                dict(claim, **fields),
+                timeout=15 if command == "start" else 5,
+            )
+        )

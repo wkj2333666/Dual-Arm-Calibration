@@ -1,4 +1,4 @@
-"""Local web workbench. Hardware integration is deliberately unconfigured."""
+"""Local web workbench with explicit, optional hardware configuration."""
 
 import copy
 import io
@@ -290,6 +290,8 @@ def make_server(directory, host="127.0.0.1", port=8765, hardware_config=None):
                 if path == "/api/jobs":
                     return self.respond(202, app.start(request))
                 if path == "/api/hardware/action" and app.live:
+                    if request.get("op") == "auto-stop":
+                        return self.respond(200, app.live.automatic.stop())
                     return self.respond(200, app.live.action(request, app))
                 return self.respond(404, dict(error="接口待接入或不存在"))
             except (ValueError, TypeError, KeyError) as exc:

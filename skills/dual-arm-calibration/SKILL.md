@@ -10,7 +10,8 @@ description: Calibrate two robot arms with one camera on each wrist and one fixe
 此 Skill 随 dual-arm-calibration 仓库或 wheel 分发；使用当前 Python 环境中的
 `dual-arm-calibration --help` 确认入口。没有硬件时用 `demo` 验证环境或用标准数据离线 `solve`。
 运行 `dual-arm-calibration web`，浏览器打开 `http://127.0.0.1:8765`。
-网页使用说明见 [网页工作台](../../docs/web.md)。CLI 与当前网页均不发送机器人运动命令。
+网页使用说明见 [网页工作台](../../docs/web.md)。离线 CLI 与未配置的网页不发送运动命令；
+显式配置的 Piper 网页可在操作者核验初值与轨迹后，启动自动采集。
 
 ## 待接入：适配器与标定板
 
@@ -33,8 +34,11 @@ description: Calibrate two robot arms with one camera on each wrist and one fixe
 `--hardware-config` 启用接入，设备序列号和板规格来自现场确认，保存在被忽略的数据目录中。
 未配置该参数的通用网页仍保持空白。
 接入复用 RoboBench 已有设备进程，不能再启动第二组 CAN / RealSense 连接。
-硬件页面支持原始 RGB、实测法兰位姿的手动分阶段采集与求解，不自动移动机械臂。
-旧外参若未通过质量检查，只能保留为历史参考，不能充当已验证结果或用于无审查自动规划。
+硬件页面支持原始 RGB、实测法兰位姿的手动分阶段采集、单图板位姿估算、轨迹预览与自动腕相机采集。
+自动内参目标 28 张，外参目标 20 张，按当前有效样本计算补采量。生成或验证轨迹本身不执行运动，
+执行必须对应当前会话与批次的已核验预览；网页有独立的停止并保持按钮，停止不等待采集锁。
+规划、取消、服务重启和失败不得自动重放运动；重启后重新预览。保留已有样本，质量失败按反馈补采。
+旧外参若未通过质量检查，只能作为明确标记的规划初值，不能充当已验证结果；操作者需核验初值和轨迹再执行。
 
 ## 操作决策
 

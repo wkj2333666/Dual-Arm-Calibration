@@ -17,6 +17,7 @@ from .storage import atomic_json
 from .validation import observations
 from .workflow import ARMS, CAMERAS, check_rig, cross_validate, digest, table_frame
 from .wrist import solve_wrist
+from .automatic import AutomaticCapture
 
 
 class LiveCalibration:
@@ -34,6 +35,7 @@ class LiveCalibration:
         self.session = json.loads(self.path.read_text()) if self.path.exists() else None
         self.last_probe = None
         self.probed_at = 0
+        self.automatic = AutomaticCapture(self)
 
     def save(self):
         atomic_json(self.path, self.session)
@@ -49,7 +51,8 @@ class LiveCalibration:
             out = dict(
                 configured=True,
                 board=self.config["board"],
-                motion_supported=False,
+                motion_supported=hasattr(self.provider, "motion_command"),
+                automatic=self.automatic.status(),
                 board_thickness_mm=self.config.get("board_thickness_mm"),
                 session=None,
             )
@@ -227,6 +230,8 @@ class LiveCalibration:
             if key.startswith("bridges-")
             else [role]
         )
+        if payload.get("top_reference") and "top" not in roles:
+            roles.append("top")
         device = self.probe(force=True)
         for a in ARMS:
             identity = (
@@ -234,7 +239,11 @@ class LiveCalibration:
             )
             if s["rig"]["arms"][a]["model_id"] != identity:
                 raise ValueError("机器人模型或安装身份变化，请新建流程")
-        raw = self.provider.capture(roles)
+        raw = (
+            self.provider.capture(roles, motion=payload["motion"])
+            if payload.get("motion")
+            else self.provider.capture(roles)
+        )
         board = Board(s["rig"]["board"])
         obs = {}
         sid = uuid.uuid4().hex
@@ -293,7 +302,11 @@ class LiveCalibration:
                 reprojection_error_px=after.reprojection_error_px,
             )
             observations([obs[r]], board.object_points, model)
-        primary = "top" if "top" in roles else role
+        primary = (
+            "top"
+            if key in ("validation", "table") or key.startswith("bridges-")
+            else role
+        )
         for old in samples:
             prior = old["cameras"][primary] if "cameras" in old else old
             common = sorted(
@@ -315,6 +328,37 @@ class LiveCalibration:
                 ):
                     raise ValueError("与已有观测太接近，请改变距离或倾角")
         arms = raw["packets"][1]["arms"]
+        if payload.get("top_reference") is not None:
+            from .validation import transform
+            from scipy.spatial.transform import Rotation
+
+            reference = payload["top_reference"]
+            if obs["top"]["camera_frame"]["serial"] != reference["serial"]:
+                raise ValueError("顶相机跟踪身份变化")
+            actual = transform(obs["top"]["camera_from_target"])
+            expected = transform(reference["camera_from_board"])
+            if np.linalg.norm(
+                actual[:3, 3] - expected[:3, 3]
+            ) > 0.005 or Rotation.from_matrix(
+                expected[:3, :3].T @ actual[:3, :3]
+            ).magnitude() > np.deg2rad(1):
+                raise ValueError("固定顶相机检测到板移动，自动采集停止，请重新估算")
+        elif payload.get("board_reference") is not None:
+            from .validation import transform
+            from scipy.spatial.transform import Rotation
+
+            estimate = (
+                transform(arms[role]["base_from_flange"])
+                @ transform(payload["planning_seed"])
+                @ transform(obs[role]["camera_from_target"])
+            )
+            reference = transform(payload["board_reference"])
+            if np.linalg.norm(
+                estimate[:3, 3] - reference[:3, 3]
+            ) > 0.01 or Rotation.from_matrix(
+                reference[:3, :3].T @ estimate[:3, :3]
+            ).magnitude() > np.deg2rad(3):
+                raise ValueError("固定板位姿偏离规划初值，自动采集停止，请重新估算")
         if key in ("table", "validation"):
             sample = dict(
                 id=sid,
@@ -333,6 +377,8 @@ class LiveCalibration:
         sample["measurement"] = dict(
             stable_s=raw["stable_s"], timing=raw["timing"], arms=arms
         )
+        if payload.get("top_reference"):
+            sample["measurement"]["fixed_top_observation"] = obs["top"]
         images = self.directory / s["id"] / "images"
         images.mkdir(parents=True, exist_ok=True)
         for r in roles:
@@ -383,6 +429,19 @@ class LiveCalibration:
     def action(self, payload, workbench):
         with self.lock:
             op = payload.get("op")
+            if self.automatic.active():
+                raise ValueError("自动采集或规划运行中，请先停止")
+            if op == "estimate":
+                self.automatic.estimate(payload.get("batch", ""))
+                return dict(ok=True)
+            if op == "auto-plan":
+                self.automatic.plan(payload.get("batch", ""))
+                return dict(ok=True)
+            if op == "auto-start":
+                self.automatic.start(
+                    payload.get("batch", ""), payload.get("confirmed") is True
+                )
+                return dict(ok=True)
             if op == "new":
                 self.new(payload)
             elif op == "capture":
