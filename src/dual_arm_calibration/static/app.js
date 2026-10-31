@@ -72,7 +72,9 @@ function readDraft() {
   return draft;
 }
 $("#draft-form").addEventListener("submit",async event => {
-  event.preventDefault(); const button = event.submitter; button.disabled = true;
+  event.preventDefault();
+  if(state?.hardware?.configured)return;
+  const button = event.submitter; button.disabled = true;
   try {await request("/api/draft",readDraft()); $("#draft-feedback").textContent = "草稿已保存 · 硬件仍待接入";}
   catch(error) {$("#draft-feedback").textContent = error.message;}
   finally {button.disabled = false;}
@@ -114,8 +116,8 @@ async function refresh() {
     const next = await request("/api/state");
     const changed = !state || JSON.stringify(state.jobs) !== JSON.stringify(next.jobs);
     state = next;
-    renderHardware();
     if (!draftLoaded) loadDraft(state.draft);
+    renderHardware();
     if (changed) renderJobs();
     $("#connection-error").hidden = true;
   } catch(error) {
@@ -158,6 +160,39 @@ function renderHardware() {
   $('#integration-status').textContent='已通过 RoboBench 接入双 Piper 与三台 D435i。请进入硬件标定，确认板规格并新建流程。';
   const error=$('#hardware-error'); error.hidden=!hw.error; error.textContent=hw.error||'';
   const b=hw.board;
+  const step=$('#hardware-step-state');
+  step.textContent=hw.connected?'已接入':'已配置 · 连接异常';
+  step.className=`pill ${hw.connected?'success':'pending'}`;
+  $('#integration-description').textContent='当前实例已加载 Piper 现场配置。以下为正在使用的设备映射和标定板规格，只读显示；修改接入配置需更新现场配置文件。';
+  $('#save-draft').hidden=true;
+  $('#draft-feedback').textContent=hw.connected?'现场配置已加载 · 设备在线':'现场配置已加载 · '+(hw.error||'等待设备');
+  $('#integration-notice strong').textContent='Piper 硬件接入已完成';
+  $('#integration-notice p').textContent='双臂反馈、三相机预览与原始图像采集均通过 RoboBench 设备服务接入。请在“硬件标定”中继续操作。通用未配置实例仍使用空白接入草稿。';
+  $('#draft-fields .form-group:last-child .subtle').textContent='已加载现场确认的标定板规格。';
+  const values={
+    'board.squares_x':b.squares_x,'board.squares_y':b.squares_y,
+    'board.square_length_mm':b.square_length_m*1000,'board.marker_length_mm':b.marker_length_m*1000,
+    'board.dictionary':b.dictionary,'board.thickness_mm':hw.board_thickness_mm,
+    notes:'当前显示实际加载的现场配置；空白接入草稿仅用于尚未配置硬件的实例。'
+  };
+  for(const arm of ['left','right']){
+    const a=hw.devices?.arms?.[arm];
+    values[`arms.${arm}.adapter`]='RoboBench / Piper';
+    values[`arms.${arm}.model_id`]=a?`${a.serial} · ${hw.devices.model_sha256}`:'已配置，等待设备反馈';
+    values[`arms.${arm}.connection`]=a?.channel||'由 RoboBench 设备服务提供';
+  }
+  for(const role of ['left','right','top']){
+    const c=hw.devices?.cameras?.[role];
+    values[`cameras.${role}.adapter`]='RoboBench / RealSense D435i';
+    values[`cameras.${role}.serial`]=c?.serial||'已配置，等待设备反馈';
+    values[`cameras.${role}.profile`]=c?`${c.intrinsics.width} × ${c.intrinsics.height} RGB · 厂家原始参数`:'已配置，等待设备反馈';
+  }
+  for(const input of $('#draft-form').elements){
+    if(!input.name)continue;
+    const value=String(values[input.name]??'未配置');
+    if(input.value!==value)input.value=value;
+    input.readOnly=true;
+  }
   $('#hardware-board').textContent=`已确认板规格：${b.squares_x} × ${b.squares_y} 方格，方格 ${b.square_length_m*1000} mm，标记 ${b.marker_length_m*1000} mm，${b.dictionary}；板厚 ${hw.board_thickness_mm??'未配置'} mm。`;
   for (const role of ['left','right','top']) {
     const c=hw.devices?.cameras?.[role];

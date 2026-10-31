@@ -29,7 +29,7 @@
       <div class="rig-strip" aria-label="硬件结构"><div><span class="rig-icon">↙</span><strong>左机械臂 + 腕相机</strong><small>待接入</small></div><div><span class="rig-icon">⊙</span><strong>固定顶相机</strong><small>待接入</small></div><div><span class="rig-icon">↘</span><strong>右机械臂 + 腕相机</strong><small>待接入</small></div></div>
       <div class="section-heading"><h2>标定步骤</h2><a href="#integration">填写接入草稿 →</a></div>
       <div class="steps">
-        <article class="step"><span class="step-number">01</span><div><h3>确认硬件与标定板</h3><p>确认适配器、坐标约定、相机配置与标定板规格。</p><span class="pill pending">待接入</span></div></article>
+        <article class="step"><span class="step-number">01</span><div><h3>确认硬件与标定板</h3><p>确认适配器、坐标约定、相机配置与标定板规格。</p><span id="hardware-step-state" class="pill pending">待接入</span></div></article>
         <article class="step"><span class="step-number">02</span><div><h3>选择相机参数 <span class="optional">可选标定</span></h3><p>每台相机可复用参数；D435i RGB 可选择固定厂家 K、仅拟合 k1 和 k2。</p></div></article>
         <article class="step"><span class="step-number">03</span><div><h3>分别标定左右腕相机</h3><p>每侧固定标定板，采集不同机械臂姿态，求解相机到法兰的变换。</p></div></article>
         <article class="step"><span class="step-number">04</span><div><h3>通过顶相机连接双臂</h3><p>顶相机分别与左右腕相机成对观察，统一两个基座的坐标关系。</p></div></article>
@@ -40,13 +40,13 @@
     </section>
     <section id="page-integration" class="page" hidden>
       <div class="eyebrow">设备与标定板</div><h1>接入配置</h1>
-      <p class="lead">以下字段初始留空，作为后续接入清单保存。填写草稿后仍需实现并验证适配器，才能开始硬件采集。</p>
+      <p class="lead" id="integration-description">以下字段初始留空，作为后续接入清单保存。填写草稿后仍需实现并验证适配器，才能开始硬件采集。</p>
       <form id="draft-form">
         <div id="draft-fields"></div>
         <label class="field">接入备注<textarea name="notes" rows="3" placeholder="待接入"></textarea></label>
-        <div class="actions"><button type="submit">保存接入草稿</button><span id="draft-feedback" role="status"></span></div>
+        <div class="actions"><button id="save-draft" type="submit">保存接入草稿</button><span id="draft-feedback" role="status"></span></div>
       </form>
-      <div class="notice"><strong>待接入内容已写入 Skill</strong><p>设备连接、法兰位姿转换、相机图像配置、标定板实测规格，以及网页预览和采集接口，需要在具体机器人上完成接入。</p><a href="https://github.com/wkj2333666/Dual-Arm-Calibration/blob/main/skills/dual-arm-calibration/SKILL.md" target="_blank" rel="noopener">查看 Skill 接入清单 ↗</a></div>
+      <div class="notice" id="integration-notice"><strong>待接入内容已写入 Skill</strong><p>设备连接、法兰位姿转换、相机图像配置、标定板实测规格，以及网页预览和采集接口，需要在具体机器人上完成接入。</p><a href="https://github.com/wkj2333666/Dual-Arm-Calibration/blob/main/skills/dual-arm-calibration/SKILL.md" target="_blank" rel="noopener">查看 Skill 接入清单 ↗</a></div>
     </section>
     <section id="page-offline" class="page" hidden>
       <div class="eyebrow">无需连接硬件</div><h1>离线验证</h1>
