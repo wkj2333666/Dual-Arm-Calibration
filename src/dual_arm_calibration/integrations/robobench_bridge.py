@@ -40,6 +40,17 @@ def normalize_intrinsics(meta):
     )
 
 
+def proxy_host(headers):
+    """Honor browser same-origin evidence when the local gateway rewrites Host."""
+    host = headers.get("host", "")
+    origin = headers.get("origin")
+    if origin and urlsplit(origin).netloc != host:
+        if headers.get("sec-fetch-site") != "same-origin":
+            raise ValueError("不接受跨站请求")
+        host = urlsplit(origin).netloc
+    return host
+
+
 def install(app):
     from fastapi import APIRouter, HTTPException, Request
     from fastapi.responses import Response
@@ -238,9 +249,10 @@ def install(app):
     @router.api_route("/dual-arm-calibration/{path:path}", methods=["GET", "POST"])
     async def workbench_proxy(request: Request, path: str):
         origin = request.headers.get("origin")
-        host = request.headers.get("host", "")
-        if origin and urlsplit(origin).netloc != host:
-            raise HTTPException(403, "不接受跨站请求")
+        try:
+            host = proxy_host(request.headers)
+        except ValueError as exc:
+            raise HTTPException(403, str(exc)) from exc
         if request.method == "POST":
             if (
                 request.headers.get("content-type", "").split(";")[0]

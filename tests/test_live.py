@@ -7,7 +7,10 @@ import pytest
 
 from dual_arm_calibration.board import Board
 from dual_arm_calibration.demo import generate
-from dual_arm_calibration.integrations.robobench_bridge import normalize_intrinsics
+from dual_arm_calibration.integrations.robobench_bridge import (
+    normalize_intrinsics,
+    proxy_host,
+)
 from dual_arm_calibration.web import Workbench
 from dual_arm_calibration.workflow import digest
 
@@ -191,3 +194,15 @@ def test_realsense_projection_models_are_explicit():
         normalize_intrinsics(meta)
     intr["model"] = 4
     assert normalize_intrinsics(meta)["model"] == "opencv_brown_conrady"
+
+
+def test_rewritten_host_accepts_only_browser_same_origin_evidence():
+    headers = {
+        "host": "127.0.0.1:8000",
+        "origin": "http://127.0.0.1:5173",
+        "sec-fetch-site": "same-origin",
+    }
+    assert proxy_host(headers) == "127.0.0.1:5173"
+    headers["sec-fetch-site"] = "cross-site"
+    with pytest.raises(ValueError, match="跨站"):
+        proxy_host(headers)
