@@ -30,6 +30,9 @@
   const names={native_raw:'相机原生',native_filtered:'相机 + SDK 滤波',fast_foundation_stereo:'FFS · 原参数',ffs_factory_intrinsics_refit_extrinsics:'FFS · 重标双目外参',ffs_fit_intrinsics_radial2:'FFS · 重标内外参',ffs_factory_intrinsics_refit_extrinsics_refit_color:'FFS · 双目外参 + RGB 外参',ffs_fit_intrinsics_radial2_refit_color:'FFS · 双目内外参 + RGB 外参'};
   names.ffs_fixed_K_radial2='FFS · 固定焦距主点，仅拟合畸变及双目外参';
   names.ffs_fixed_K_radial2_refit_color='FFS · 固定焦距主点 + RGB 外参';
+  names.ffs_fixed_K_radial2_refit_color_w1280='FFS · 固定焦距主点分步拟合 · 1280';
+  names.ffs_joint_fixed_K_radial2_refit_color='FFS · 固定焦距主点联合拟合 · 960';
+  names.ffs_joint_fixed_K_radial2_refit_color_w1280='FFS · 固定焦距主点联合拟合 · 1280';
   for(const r of c.summary){const tr=el('tr');[r.mode,names[r.method]||r.method,r.board_height_mm.mean.toFixed(2),(r.board_height_mm.mean-c.expected_board_height_mm).toFixed(2),r.board_height_mm.std.toFixed(2)].forEach(x=>tr.append(el('td',x)));table.append(tr)}box.append(table);
   if(c.independent_validation)box.append(el('p','新标定结果使用采集前保存的独立图像验证，未拟合高度偏移；仍沿用既有桌面坐标和相机外参。'));
   for(const mode of ['emitter_on','emitter_off']){
@@ -52,6 +55,7 @@
    const result=s.result;
    get('result-summary').textContent=result?`${result.training_ids.length} 组拟合、${result.heldout_ids.length} 组留出验证；候选 ${result.selected}，右图重投影 RMS ${result.candidate.heldout_right_rms_px.toFixed(3)} px。${result.height_validation?.hint||'仍需独立高度验证。'}${result.color_extrinsics_fit?.hint||''}`:s.solve?.hint||'尚未拟合';
    if(result?.fixed_K_comparison)get('result-summary').textContent+=result.fixed_K_comparison.hint;
+   if(result?.joint_comparison)get('result-summary').textContent=result.joint_comparison.hint;
    get('result').textContent=result?JSON.stringify(result,null,2):'尚未拟合';
    if(s.interrupted)get('message').textContent='上次采集意外中断，请核对相机恢复状态；原始样本已保留。';
    comparison(s.comparison);
