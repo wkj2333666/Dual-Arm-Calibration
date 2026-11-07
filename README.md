@@ -72,6 +72,7 @@ dual-arm-calibration publish runs/calibration-001 active-calibration.json
 - [操作 Skill](skills/dual-arm-calibration/SKILL.md)：供 Codex 使用，可复制整个 Skill 目录到自己的技能目录。
 - [代码来源](docs/provenance.json)：提取时的版本及工作区文件哈希。
 - [验证记录](docs/validation.md)：合成测试、历史实测回放和安装包验证的范围。
+- [IR–RGB 时间一致性待核查](docs/validation.md#2026-11-07红外与-rgb-时间一致性待核查)：2026-11-07 实测误差、采集记录缺口及尚未实施的复测计划。
 
 安装 wheel 时，Skill 与上述文档也会安装到 Python 环境的 `share/dual-arm-calibration/`。
 原始图像和录像应与运行记录一起归档；求解数据包保留角点和位姿，本版本不会自动复制外部媒体。
