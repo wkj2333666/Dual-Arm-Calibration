@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 import pytest
 from dual_arm_calibration.board import Board
-from dual_arm_calibration.stereo import solve
+from dual_arm_calibration.stereo import solve, matrix
 
 
 def synthetic():
@@ -40,3 +40,18 @@ def test_rejects_insufficient_or_duplicated_capture():
     with pytest.raises(ValueError):solve(dict(data,samples=data['samples'][:20]))
     data['samples'][1]['left']=data['samples'][0]['left']
     with pytest.raises(ValueError,match='重复照片'):solve(data)
+
+
+def test_fixed_k_fits_distortion_without_changing_focal_length_or_principal_point():
+    data=synthetic();truth={'left':np.array([.02,-.015,0,0,0]),'right':np.array([-.012,.008,0,0,0])}
+    for side in ('left','right'):
+        k=matrix(data[side])
+        for s in data['samples']:
+            normalized=cv2.undistortPoints(np.array(s[side]).reshape(-1,1,2),k,np.zeros(5)).reshape(-1,2)
+            xyz=np.column_stack([normalized,np.ones(len(normalized))])
+            s[side]=cv2.projectPoints(xyz,np.zeros(3),np.zeros(3),k,truth[side])[0].reshape(-1,2).tolist()
+    result=solve(data,fixed_k_radial2=True);c=result['candidate']
+    for side in ('left','right'):
+        np.testing.assert_array_equal(c['K_'+side],matrix(data[side]))
+        np.testing.assert_allclose(c['D_'+side],truth[side],atol=1e-4)
+    assert c['heldout_right_rms_px']<.01
