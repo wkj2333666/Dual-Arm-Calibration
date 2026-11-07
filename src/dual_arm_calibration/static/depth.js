@@ -33,12 +33,20 @@
   names.ffs_fixed_K_radial2_refit_color_w1280='FFS · 固定焦距主点分步拟合 · 1280';
   names.ffs_joint_fixed_K_radial2_refit_color='FFS · 固定焦距主点联合拟合 · 960';
   names.ffs_joint_fixed_K_radial2_refit_color_w1280='FFS · 固定焦距主点联合拟合 · 1280';
+  names.ffs_factory='FFS · 原参数';
+  names.ffs_calibrated='FFS · 已应用固定 K 联合标定';
+  if(c.active_calibration_id)box.append(el('p',`当前 FFS 标定：${c.active_calibration_id}。本次为重新放板后新采的静态图像；未拟合高度偏移。衣服没有实测真值，高度变化不能直接等同于精度。`));
   for(const r of c.summary){const tr=el('tr');[r.mode,names[r.method]||r.method,r.board_height_mm.mean.toFixed(2),(r.board_height_mm.mean-c.expected_board_height_mm).toFixed(2),r.board_height_mm.std.toFixed(2)].forEach(x=>tr.append(el('td',x)));table.append(tr)}box.append(table);
   if(c.independent_validation)box.append(el('p','新标定结果使用采集前保存的独立图像验证，未拟合高度偏移；仍沿用既有桌面坐标和相机外参。'));
   for(const mode of ['emitter_on','emitter_off']){
    const rows=c.summary.filter(r=>r.mode===mode);if(!rows.length)continue;
    box.append(el('h3',`衣服区域 · ${mode} · 高度 mm`));const t=el('table'),h=el('tr');h.append(el('th','区域'));rows.forEach(r=>h.append(el('th',names[r.method]||r.method)));t.append(h);
    for(const name of Object.keys(rows[0].cloth_height_mm)){const tr=el('tr');tr.append(el('td',name));rows.forEach(r=>tr.append(el('td',r.cloth_height_mm[name]?.mean?.toFixed(1)??'无数据')));t.append(tr)}box.append(t);
+   if(rows.some(r=>r.table_height_mm)){
+    box.append(el('h3',`裸桌面区域 · ${mode} · 参考 0 mm`));const tt=el('table'),hh=el('tr');hh.append(el('th','区域'));rows.forEach(r=>hh.append(el('th',names[r.method]||r.method)));tt.append(hh);
+    const regions=[...new Set(rows.flatMap(r=>Object.keys(r.table_height_mm||{})))];
+    for(const name of regions){const tr=el('tr');tr.append(el('td',name));rows.forEach(r=>{const v=r.table_height_mm?.[name];tr.append(el('td',v?`${v.mean.toFixed(1)} ± ${v.std.toFixed(1)} mm（${v.n} 帧）`:'无数据'))});tt.append(tr)}box.append(tt);
+   }
   }
  }
  async function update(){
@@ -56,6 +64,7 @@
    get('result-summary').textContent=result?`${result.training_ids.length} 组拟合、${result.heldout_ids.length} 组留出验证；候选 ${result.selected}，右图重投影 RMS ${result.candidate.heldout_right_rms_px.toFixed(3)} px。${result.height_validation?.hint||'仍需独立高度验证。'}${result.color_extrinsics_fit?.hint||''}`:s.solve?.hint||'尚未拟合';
    if(result?.fixed_K_comparison)get('result-summary').textContent+=result.fixed_K_comparison.hint;
    if(result?.joint_comparison)get('result-summary').textContent=result.joint_comparison.hint;
+   if(result?.ffs_application)get('result-summary').textContent=result.ffs_application.hint;
    get('result').textContent=result?JSON.stringify(result,null,2):'尚未拟合';
    if(s.interrupted)get('message').textContent='上次采集意外中断，请核对相机恢复状态；原始样本已保留。';
    comparison(s.comparison);

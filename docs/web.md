@@ -93,3 +93,40 @@ Y8 红外是已校正图像，拟合的畸变仅描述残余修正，不能再�
 训练与留出 ID 不变，不剔除误差大的留出姿态；留出观测不进入优化。
 报告收敛状态、三路训练误差和分别预测右 IR／RGB 的留出误差；三路训练 RMS 不应与
 之前仅双目的训练 RMS 直接比较。仍须独立测量板高，不能凭拟合误差下降发布参数。
+
+### 使用已应用标定的 FFS 推理
+
+2026-11-07 经操作者授权，固定 K 联合候选已应用到 H100 SSH 别名对应主机的 FFS 服务。
+这是服务端按相机序列号选择的几何校正，不是模型重新训练。未写入相机固件，抓取接口仍使用
+原生深度；既有 RGB 标定和桌面基准未变。新采图像的验证结果见[验证记录](validation.md)。
+
+服务端加载 `/home/wkj/ffs-service/calibration/active.json`，校正模块为
+`ffs_profile.py`（与本仓库同名模块相同）。当前 profile ID 为
+`top-d435i-joint-fixed-k-20261107`，仅用于序列号 `262922070766` 的 1280×720 SDK Y8 红外图。
+profile 保存 `image_size`、`stereo`（K/D/R1/R2/P1/P2）、`color_from_left`、
+`world_from_rgb`、`table_z_m`，以及来源记录。参数保存在本机运行数据中，不随源码公开分发。
+
+先通过 SSH Bridge 转发服务端口 18080，然后使用客户端（安装 depth 可选依赖）：
+
+```bash
+python -m dual_arm_calibration.ffs_client \
+  --url http://127.0.0.1:18080 \
+  --left /absolute/path/left.png --right /absolute/path/right.png \
+  --serial 262922070766 --width 960 --output /absolute/path/result.npz
+```
+
+客户端默认向 `/infer` 发送 `calibration=active` 和 `camera_serial`，可在 Python API 中传入
+精确 profile ID 以固定版本。服务拒绝不匹配的序列号/输入尺寸和标定模式下手动覆盖的
+fx、baseline、cx；未传 calibration 的旧请求保持原行为，不能假定旧调用者自动应用新标定。
+
+服务先在完整输入分辨率下校正，再缩放、推理。重建使用与输出尺寸配套的 P1/P2，
+包含主点差和缩放的像素中心变换，之后用 R1 逆旋转回原左 IR 坐标，经过 IR→RGB→世界
+变换得到桌面上方高度。不额外拟合或减去高度偏移。
+输出 NPZ 的 `depth_m` 是新校正左相机轴向深度；`xyz_left_m` 是原左 IR 坐标；
+`height_above_table_m` 是米制桌面高度。`valid` 只表示视差有限且几何上有效，不是置信度或遮挡判断。
+`metadata` 记录所用标定及坐标系；消费端须核对，不可再套厂家 IR→RGB 外参重复转换。
+
+部署前服务源码备份在远端 `/home/wkj/ffs-service/backups/pre-calibrated-20261107/server.py`。
+需要回退时，先保留当前源码及 active.json，再用该备份恢复 `/home/wkj/ffs-service/server.py`，
+执行 `systemctl --user restart ffs-inference.service` 并检查 `/health`。旧服务不读取新 profile；
+标定模式客户端应停止使用，改回原调用路径。此回退不改变相机固件或机器人配置。
