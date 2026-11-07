@@ -62,12 +62,16 @@ def validate_draft(value):
 
 
 class Workbench:
-    def __init__(self, directory, hardware_config=None):
+    def __init__(self, directory, hardware_config=None, depth_config=None):
         self.directory = Path(directory).resolve()
         self.directory.mkdir(parents=True, exist_ok=True)
         self.lock = threading.Lock()
         self.pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="calibration")
         self.jobs = {}
+        self.depth = None
+        if depth_config:
+            from .depth_workbench import DepthWorkbench
+            self.depth = DepthWorkbench(self.directory, depth_config)
         self.live = None
         if hardware_config:
             from .live import LiveCalibration
@@ -101,6 +105,8 @@ class Workbench:
                     ),
                 )
             )
+        if self.depth:
+            out["depth"] = self.depth.state()
         if self.live:
             out["hardware"] = self.live.status()
             out["hardware_connected"] = out["hardware"]["connected"]
@@ -193,11 +199,13 @@ class Workbench:
         return out.getvalue()
 
     def close(self):
+        if self.depth:
+            self.depth.close()
         self.pool.shutdown(wait=True)
 
 
-def make_server(directory, host="127.0.0.1", port=8765, hardware_config=None):
-    app = Workbench(directory, hardware_config)
+def make_server(directory, host="127.0.0.1", port=8765, hardware_config=None, depth_config=None):
+    app = Workbench(directory, hardware_config, depth_config)
 
     class Handler(BaseHTTPRequestHandler):
         def respond(
@@ -225,13 +233,18 @@ def make_server(directory, host="127.0.0.1", port=8765, hardware_config=None):
                     "Content-Disposition", f'attachment; filename="{download}"'
                 )
             self.end_headers()
-            self.wfile.write(payload)
+            if self.command != "HEAD":
+                self.wfile.write(payload)
+
+        def do_HEAD(self):
+            self.do_GET()
 
         def do_GET(self):
             path = urlsplit(self.path).path
             assets = {
                 "/": ("index.html", "text/html; charset=utf-8"),
                 "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+                "/depth.js": ("depth.js", "text/javascript; charset=utf-8"),
                 "/style.css": ("style.css", "text/css; charset=utf-8"),
             }
             if path in assets:
@@ -241,6 +254,11 @@ def make_server(directory, host="127.0.0.1", port=8765, hardware_config=None):
                     files("dual_arm_calibration").joinpath("static", name).read_bytes(),
                     mime,
                 )
+            if path == "/api/depth/preview.jpg" and app.depth:
+                try:
+                    return self.respond(200, app.depth.preview(), "image/jpeg")
+                except ValueError as exc:
+                    return self.respond(409, dict(error=str(exc)))
             if path == "/api/state":
                 return self.respond(200, app.state())
             preview = re.fullmatch(r"/api/hardware/preview/(left|right|top)\.jpg", path)
@@ -285,6 +303,8 @@ def make_server(directory, host="127.0.0.1", port=8765, hardware_config=None):
                 if not isinstance(request, dict):
                     raise ValueError("请求应为 JSON 对象")
                 path = urlsplit(self.path).path
+                if path == "/api/depth/action" and app.depth:
+                    return self.respond(200, app.depth.action(request))
                 if path == "/api/draft":
                     return self.respond(200, app.save_draft(request))
                 if path == "/api/jobs":
@@ -309,8 +329,8 @@ def make_server(directory, host="127.0.0.1", port=8765, hardware_config=None):
     return server
 
 
-def serve(directory, host="127.0.0.1", port=8765, hardware_config=None):
-    server = make_server(directory, host, port, hardware_config)
+def serve(directory, host="127.0.0.1", port=8765, hardware_config=None, depth_config=None):
+    server = make_server(directory, host, port, hardware_config, depth_config)
     print(f"标定工作台：http://{host}:{server.server_port}", flush=True)
     try:
         server.serve_forever()

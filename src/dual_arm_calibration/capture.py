@@ -38,6 +38,17 @@ def detect(frame, board, model):
     )
 
 
+def board_corner_rms(ids_a, corners_a, ids_b, corners_b, minimum=12):
+    """Whole-board image displacement in pixels; shared by stationary captures."""
+    common = sorted(set(ids_a) & set(ids_b))
+    if len(common) < minimum:
+        raise ValueError("Too few common corners for stability check")
+    a = {int(i): point for i, point in zip(ids_a, corners_a)}
+    b = {int(i): point for i, point in zip(ids_b, corners_b)}
+    diff = np.asarray([np.subtract(a[int(i)], b[int(i)]) for i in common])
+    return float(np.sqrt(np.mean(np.sum(np.square(diff), axis=1))))
+
+
 def capture_stationary(
     arms, cameras, models, board_spec, *, stable_s=0.25, timeout_s=3.0
 ):
@@ -88,17 +99,8 @@ def capture_stationary(
                 if frames[r].frame_number <= previous[r].frame_number:
                     raise ValueError("Camera frame did not advance")
                 a = anchor[2][r]
-                common = sorted(set(a["charuco_ids"]) & set(o["charuco_ids"]))
-                if len(common) < 12:
-                    raise ValueError("Too few common corners for stability check")
-                diff = [
-                    np.subtract(
-                        a["charuco_corners"][a["charuco_ids"].index(i)],
-                        o["charuco_corners"][o["charuco_ids"].index(i)],
-                    )
-                    for i in common
-                ]
-                if np.sqrt(np.mean(np.sum(np.square(diff), axis=1))) > 1.5:
+                if board_corner_rms(a["charuco_ids"], a["charuco_corners"],
+                                    o["charuco_ids"], o["charuco_corners"]) > 1.5:
                     raise ValueError("Board is moving")
             for r, state in states.items():
                 mm, deg = transform_error(

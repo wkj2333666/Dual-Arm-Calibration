@@ -24,6 +24,7 @@ def main(argv=None):
         "--hardware-config",
         help="Explicit site-specific hardware JSON; no default hardware is loaded",
     )
+    web.add_argument("--depth-config", help="Explicit local RealSense stereo capture configuration")
     demo = sub.add_parser(
         "demo", help="Generate and solve a synthetic six/seven-joint rig"
     )
@@ -58,6 +59,7 @@ def main(argv=None):
                 args.host,
                 args.port,
                 read(args.hardware_config) if args.hardware_config else None,
+                args.depth_config,
             )
             return
         if args.command == "check-rig":

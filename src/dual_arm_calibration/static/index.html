@@ -6,6 +6,7 @@
   <title>双臂三相机 · 标定工作台</title>
   <link rel="stylesheet" href="./style.css">
   <script src="./app.js" defer></script>
+  <script src="./depth.js" defer></script>
 </head>
 <body>
   <aside class="sidebar">
@@ -16,6 +17,7 @@
       <a href="#offline" data-page="offline"><span>03</span>离线验证</a>
       <a href="#results" data-page="results"><span>04</span>标定结果</a>
       <a href="#hardware" data-page="hardware" id="hardware-nav" hidden><span>05</span>硬件标定</a>
+      <a href="#depth" data-page="depth"><span>06</span>深度与双目标定</a>
     </nav>
     <div class="sidebar-foot"><span class="status-dot"></span><span id="side-hardware-label">硬件待接入</span><p>支持不同品牌、不同关节数的双臂。</p></div>
   </aside>
@@ -37,6 +39,18 @@
         <article class="step"><span class="step-number">06</span><div><h3>保存与导出</h3><p>保存输入、相机模型、变换矩阵和质量报告，导出可复查的数据包。</p></div></article>
       </div>
       <div class="notice"><strong>当前接入状态</strong><p id="integration-status">硬件适配器、相机取流与标定板规格均待接入。先完成接入配置，或使用离线示例检查求解流程。</p><div class="actions"><button id="open-hardware" disabled>开始硬件采集</button><a class="button secondary" href="#offline">运行离线验证</a></div></div>
+    </section>
+    <section id="page-depth" class="page" hidden>
+      <div class="eyebrow">左右红外 · 独立高度验证</div><h1>深度与双目标定</h1>
+      <p class="lead">先保存静态高度对比，再采集不同位置、距离和倾角的板姿态。候选模型经过留出验证后，还需用独立平放板检查绝对高度。</p>
+      <div class="notice"><p id="depth-hint">未配置深度相机；使用 --depth-config 显式加载现场配置。</p><p id="depth-count"></p>
+      <div class="actions"><button id="depth-start" disabled>开始新的双目采集</button><button id="depth-resume" disabled>继续采集（保留已有样本）</button><button id="depth-stop" disabled>停止并恢复相机</button><button id="depth-solve" disabled>拟合候选并留出验证</button><button id="depth-sound">开启提示音并试音</button></div>
+      <p id="depth-sound-status" role="status" aria-live="polite">提示音尚未启用。点击试音应听到两声；开始采集也会启用声音。刷新页面后需要重新开启。</p></div>
+      <p>拿住板边，让图案完整可见。每个姿态停约 2 秒；保存后改变位置、距离或倾角。除近处姿态外，必须覆盖实际工作距离，包含接近桌面的远处姿态。不要只在一个平面平移。</p>
+      <img id="depth-preview" class="depth-preview" alt="左右红外实时角点，左图与右图并排" hidden>
+      <p id="depth-message" role="status" aria-live="polite"></p>
+      <article class="card"><h2>静态板面与衣服高度对比</h2><div id="depth-comparison">暂无对比记录。</div><p class="subtle">帧间波动小不代表绝对高度准确。衣服没有独立高度真值时，只报告差异，不能据此判断哪个更准。</p></article>
+      <article class="card"><h2>双目候选结果</h2><p id="depth-result-summary"></p><details><summary>查看参数和完整记录</summary><pre id="depth-result"></pre></details></article>
     </section>
     <section id="page-integration" class="page" hidden>
       <div class="eyebrow">设备与标定板</div><h1>接入配置</h1>

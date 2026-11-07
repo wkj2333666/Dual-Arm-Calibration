@@ -14,7 +14,7 @@ function el(tag, text, cls) {
   return node;
 }
 function route() {
-  const page = ["workflow","integration","offline","results","hardware"].includes(location.hash.slice(1)) ? location.hash.slice(1) : "workflow";
+  const page = ["workflow","integration","offline","results","hardware","depth"].includes(location.hash.slice(1)) ? location.hash.slice(1) : "workflow";
   document.querySelectorAll(".page").forEach(section => {section.hidden = section.id !== `page-${page}`;});
   document.querySelectorAll("nav a").forEach(a => {
     if (a.dataset.page === page) a.setAttribute("aria-current","page");
